@@ -1,0 +1,58 @@
+{
+  "name": "axionvera-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for interacting with Axionvera smart contracts on Stellar (Soroban).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/axionvera/axionvera-sdk.git"
+  },
+  "homepage": "https://github.com/axionvera/axionvera-sdk",
+  "bugs": {
+    "url": "https://github.com/axionvera/axionvera-sdk/issues"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "web3",
+    "sdk",
+    "axionvera",
+    "typescript"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^14.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0",
+    "rimraf": "^6.0.1",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.5.4"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.ts"
+    ],
+    "clearMocks": true
+  }
+}
