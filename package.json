@@ -54,5 +54,9 @@
       "<rootDir>/tests/**/*.test.ts"
     ],
     "clearMocks": true
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }
