@@ -10,6 +10,7 @@ import {
 
 import { AxionveraNetwork, resolveNetworkConfig } from "../utils/networkConfig";
 import { ConcurrencyConfig, DEFAULT_CONCURRENCY_CONFIG, createConcurrencyControlledClient } from "../utils/concurrencyQueue";
+import { RetryConfig, createHttpClientWithRetry, retry } from "../utils/httpInterceptor";
 
 export type StellarClientOptions = {
   network?: AxionveraNetwork;
@@ -17,6 +18,7 @@ export type StellarClientOptions = {
   networkPassphrase?: string;
   rpcClient?: rpc.Server;
   concurrencyConfig?: Partial<ConcurrencyConfig>;
+  retryConfig?: Partial<RetryConfig>;
 };
 
 export type TransactionSendResult = {
@@ -32,6 +34,8 @@ export class StellarClient {
   readonly rpc: rpc.Server;
   readonly concurrencyConfig: ConcurrencyConfig;
   private concurrencyEnabled: boolean;
+  readonly httpClient;
+  readonly retryConfig: Partial<RetryConfig>;
 
   constructor(options?: StellarClientOptions) {
     const config = resolveNetworkConfig(options);
@@ -43,6 +47,8 @@ export class StellarClient {
       ...options?.concurrencyConfig
     };
     this.concurrencyEnabled = !!options?.concurrencyConfig;
+    this.retryConfig = options?.retryConfig ?? {};
+    this.httpClient = createHttpClientWithRetry(this.retryConfig);
 
     if (options?.rpcClient) {
       this.rpc = options.rpcClient;
@@ -60,19 +66,19 @@ export class StellarClient {
   }
 
   async getHealth(): Promise<unknown> {
-    return this.rpc.getHealth();
+    return retry(() => this.rpc.getHealth(), this.retryConfig);
   }
 
   async getNetwork(): Promise<unknown> {
-    return this.rpc.getNetwork();
+    return retry(() => this.rpc.getNetwork(), this.retryConfig);
   }
 
   async getLatestLedger(): Promise<unknown> {
-    return this.rpc.getLatestLedger();
+    return retry(() => this.rpc.getLatestLedger(), this.retryConfig);
   }
 
   async getAccount(publicKey: string): Promise<Account> {
-    return this.rpc.getAccount(publicKey);
+    return retry(() => this.rpc.getAccount(publicKey), this.retryConfig);
   }
 
   async simulateTransaction(
@@ -93,7 +99,7 @@ export class StellarClient {
   }
 
   async getTransaction(hash: string): Promise<unknown> {
-    return this.rpc.getTransaction(hash);
+    return retry(() => this.rpc.getTransaction(hash), this.retryConfig);
   }
 
   async pollTransaction(
