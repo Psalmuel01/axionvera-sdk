@@ -13,3 +13,6 @@ export { buildContractCallOperation, buildContractCallTransaction, toScVal } fro
 
 export type { RetryConfig } from "./utils/httpInterceptor";
 export { createHttpClientWithRetry, retry } from "./utils/httpInterceptor";
+
+export type { ConcurrencyConfig } from "./utils/concurrencyQueue";
+export { ConcurrencyQueue, createConcurrencyControlledClient, DEFAULT_CONCURRENCY_CONFIG } from "./utils/concurrencyQueue";

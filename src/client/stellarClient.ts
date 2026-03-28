@@ -9,6 +9,7 @@ import {
 } from "@stellar/stellar-sdk";
 
 import { AxionveraNetwork, resolveNetworkConfig } from "../utils/networkConfig";
+import { ConcurrencyConfig, DEFAULT_CONCURRENCY_CONFIG, createConcurrencyControlledClient } from "../utils/concurrencyQueue";
 import { RetryConfig, createHttpClientWithRetry, retry } from "../utils/httpInterceptor";
 
 export type StellarClientOptions = {
@@ -16,6 +17,7 @@ export type StellarClientOptions = {
   rpcUrl?: string;
   networkPassphrase?: string;
   rpcClient?: rpc.Server;
+  concurrencyConfig?: Partial<ConcurrencyConfig>;
   retryConfig?: Partial<RetryConfig>;
 };
 
@@ -62,6 +64,11 @@ export class StellarClient {
     this.network = config.network;
     this.rpcUrl = config.rpcUrl;
     this.networkPassphrase = config.networkPassphrase;
+    this.concurrencyConfig = {
+      ...DEFAULT_CONCURRENCY_CONFIG,
+      ...options?.concurrencyConfig
+    };
+    this.concurrencyEnabled = !!options?.concurrencyConfig;
     this.retryConfig = options?.retryConfig ?? {};
     this.httpClient = createHttpClientWithRetry(this.retryConfig);
 
@@ -69,7 +76,14 @@ export class StellarClient {
       this.rpc = options.rpcClient;
     } else {
       const allowHttp = this.rpcUrl.startsWith("http://");
-      this.rpc = new rpc.Server(this.rpcUrl, { allowHttp });
+      const baseRpc = new rpc.Server(this.rpcUrl, { allowHttp });
+
+      // Apply concurrency control if enabled
+      if (this.concurrencyEnabled) {
+        this.rpc = createConcurrencyControlledClient(baseRpc, this.concurrencyConfig);
+      } else {
+        this.rpc = baseRpc;
+      }
     }
   }
 
@@ -220,5 +234,32 @@ export class StellarClient {
       case "mainnet":
         return Networks.PUBLIC;
     }
+  }
+
+  /**
+   * Get concurrency control statistics
+   */
+  getConcurrencyStats() {
+    if (!this.concurrencyEnabled) {
+      return {
+        enabled: false,
+        message: 'Concurrency control is not enabled'
+      };
+    }
+
+    // Try to get stats from the wrapped client if it has the method
+    if ('getStats' in this.rpc && typeof this.rpc.getStats === 'function') {
+      return {
+        enabled: true,
+        ...this.rpc.getStats()
+      };
+    }
+
+    return {
+      enabled: true,
+      maxConcurrentRequests: this.concurrencyConfig.maxConcurrentRequests,
+      queueTimeout: this.concurrencyConfig.queueTimeout,
+      message: 'Stats not available from wrapped client'
+    };
   }
 }
