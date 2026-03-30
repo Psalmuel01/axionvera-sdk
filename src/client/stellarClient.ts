@@ -11,6 +11,7 @@ import {
 import { AxionveraNetwork, resolveNetworkConfig } from "../utils/networkConfig";
 import { ConcurrencyConfig, DEFAULT_CONCURRENCY_CONFIG, createConcurrencyControlledClient } from "../utils/concurrencyQueue";
 import { RetryConfig, createHttpClientWithRetry, retry } from "../utils/httpInterceptor";
+import { normalizeRpcError, normalizeTransactionError, normalizeSimulationError, TimeoutError } from "../errors/axionveraError";
 
 export type StellarClientOptions = {
   network?: AxionveraNetwork;
@@ -149,7 +150,11 @@ export class StellarClient {
   async simulateTransaction(
     tx: Transaction | FeeBumpTransaction
   ): Promise<rpc.Api.SimulateTransactionResponse> {
-    return this.rpc.simulateTransaction(tx);
+    try {
+      return await this.rpc.simulateTransaction(tx);
+    } catch (error) {
+      throw normalizeSimulationError(error);
+    }
   }
 
   /**
@@ -167,35 +172,39 @@ export class StellarClient {
    * @param tx - The signed transaction to submit
    * @returns The submission result containing hash and status
    */
- async sendTransaction(tx: Transaction | FeeBumpTransaction): Promise<TransactionSendResult> {
-  let finalTx: Transaction | FeeBumpTransaction = tx;
+  async sendTransaction(tx: Transaction | FeeBumpTransaction): Promise<TransactionSendResult> {
+    let finalTx: Transaction | FeeBumpTransaction = tx;
 
-  // If a wallet is available, sign the transaction before submission
-  if ((this as any).wallet) {
-    const wallet = (this as any).wallet;
+    try {
+      // If a wallet is available, sign the transaction before submission
+      if ((this as any).wallet) {
+        const wallet = (this as any).wallet;
 
-    // Convert transaction to XDR for wallet signing
-    const txXdr = tx.toXDR();
+        // Convert transaction to XDR for wallet signing
+        const txXdr = tx.toXDR();
 
-    // Sign via wallet connector
-    const signedXdr = await wallet.signTransaction(
-      txXdr,
-      this.networkPassphrase
-    );
+        // Sign via wallet connector
+        const signedXdr = await wallet.signTransaction(
+          txXdr,
+          this.networkPassphrase
+        );
 
-    // Reconstruct signed transaction from XDR
-    finalTx = TransactionBuilder.fromXDR(
-      signedXdr,
-      this.networkPassphrase
-    );
+        // Reconstruct signed transaction from XDR
+        finalTx = TransactionBuilder.fromXDR(
+          signedXdr,
+          this.networkPassphrase
+        );
+      }
+
+      // Submit either original or signed transaction
+      const result = await this.rpc.sendTransaction(finalTx);
+      const hash = (result as any).hash ?? (result as any).id ?? "";
+      const status = (result as any).status ?? (result as any).statusText ?? "unknown";
+      return { hash, status, raw: result };
+    } catch (error) {
+      throw normalizeTransactionError(error);
+    }
   }
-
-  // Submit either original or signed transaction
-  const result = await this.rpc.sendTransaction(finalTx);
-  const hash = (result as any).hash ?? (result as any).id ?? "";
-  const status = (result as any).status ?? (result as any).statusText ?? "unknown";
-  return { hash, status, raw: result };
-}
 
 
   /**
@@ -215,7 +224,7 @@ export class StellarClient {
    * @param params.timeoutMs - Maximum time to wait in milliseconds (default: 30000)
    * @param params.intervalMs - Time between polls in milliseconds (default: 1000)
    * @returns The transaction result when it reaches a final state
-   * @throws Error if the transaction times out
+   * @throws TimeoutError if the transaction times out
    */
   async pollTransaction(
     hash: string,
@@ -234,7 +243,7 @@ export class StellarClient {
       await new Promise((r) => setTimeout(r, intervalMs));
     }
 
-    throw new Error(`Timed out waiting for transaction ${hash}`);
+    throw new TimeoutError(`Timed out waiting for transaction ${hash} after ${timeoutMs}ms`);
   }
 
   /**
