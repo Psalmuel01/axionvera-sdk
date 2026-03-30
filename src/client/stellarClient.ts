@@ -12,6 +12,9 @@ import { AxionveraNetwork, resolveNetworkConfig } from "../utils/networkConfig";
 import { ConcurrencyConfig, DEFAULT_CONCURRENCY_CONFIG, createConcurrencyControlledClient } from "../utils/concurrencyQueue";
 import { RetryConfig, createHttpClientWithRetry, retry } from "../utils/httpInterceptor";
 import { normalizeRpcError, normalizeTransactionError, normalizeSimulationError, TimeoutError } from "../errors/axionveraError";
+import { WebSocketManager } from "./websocket/websocketManager";
+import {WebSocketConfig} from "./websocket/types;"
+import { Logger } from "../utils/logger";
 
 export type StellarClientOptions = {
   network?: AxionveraNetwork;
@@ -20,6 +23,8 @@ export type StellarClientOptions = {
   rpcClient?: rpc.Server;
   concurrencyConfig?: Partial<ConcurrencyConfig>;
   retryConfig?: Partial<RetryConfig>;
+  webSocketConfig?: WebSocketConfig;
+  logger?: Logger;
 };
 
 export type TransactionSendResult = {
@@ -59,6 +64,10 @@ export class StellarClient {
   readonly concurrencyConfig: ConcurrencyConfig;
   /** Whether concurrency control is enabled. */
   readonly concurrencyEnabled: boolean;
+  /** WebSocket manager for real-time event subscriptions. */
+  readonly webSocketManager?: WebSocketManager;
+  /** Logger instance for debugging and monitoring. */
+  readonly logger: Logger;
 
   /**
    * Creates a new StellarClient instance.
@@ -76,6 +85,7 @@ export class StellarClient {
     this.concurrencyEnabled = !!options?.concurrencyConfig;
     this.retryConfig = options?.retryConfig ?? {};
     this.httpClient = createHttpClientWithRetry(this.retryConfig);
+    this.logger = options?.logger ?? new Logger();
 
     // Initialize WebSocket manager if configuration is provided
     if (options?.webSocketConfig) {
@@ -109,8 +119,12 @@ export class StellarClient {
    * Automatically retries on failure.
    * @returns The health check response
    */
-  async getHealth(): Promise<unknown> {
-    return retry(() => this.rpc.getHealth(), this.retryConfig);
+  async getHealth(): Promise<rpc.Api.GetHealthResponse> {
+    try {
+      return await retry(() => this.rpc.getHealth(), this.retryConfig);
+    } catch (error) {
+      throw normalizeRpcError(error, 'getHealth');
+    }
   }
 
   /**
@@ -118,8 +132,12 @@ export class StellarClient {
    * Automatically retries on failure.
    * @returns The network configuration
    */
-  async getNetwork(): Promise<unknown> {
-    return retry(() => this.rpc.getNetwork(), this.retryConfig);
+  async getNetwork(): Promise<rpc.Api.GetNetworkResponse> {
+    try {
+      return await retry(() => this.rpc.getNetwork(), this.retryConfig);
+    } catch (error) {
+      throw normalizeRpcError(error, 'getNetwork');
+    }
   }
 
   /**
@@ -127,8 +145,12 @@ export class StellarClient {
    * Automatically retries on failure.
    * @returns The latest ledger info
    */
-  async getLatestLedger(): Promise<unknown> {
-    return retry(() => this.rpc.getLatestLedger(), this.retryConfig);
+  async getLatestLedger(): Promise<rpc.Api.GetLatestLedgerResponse> {
+    try {
+      return await retry(() => this.rpc.getLatestLedger(), this.retryConfig);
+    } catch (error) {
+      throw normalizeRpcError(error, 'getLatestLedger');
+    }
   }
 
   /**
